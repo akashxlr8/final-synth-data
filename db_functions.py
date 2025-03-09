@@ -348,3 +348,41 @@ def extract_sql_query(response_text):
         return query
     else:
         return None
+
+def delete_databases(db_names=["customer.db", "customer_testbed.db"]):
+    """
+    Delete specified databases
+    
+    Args:
+        db_names (list): List of database file names to delete
+        
+    Returns:
+        tuple: (success, message) where success is a boolean and message is a string
+    """
+    try:
+        import os
+        deleted = []
+        not_found = []
+        
+        for db_name in db_names:
+            if os.path.exists(db_name):
+                try:
+                    # Close any open connections first
+                    conn = sqlite3.connect(db_name)
+                    conn.close()
+                except:
+                    pass
+                
+                os.remove(db_name)
+                deleted.append(db_name)
+            else:
+                not_found.append(db_name)
+        
+        if deleted and not not_found:
+            return True, f"Successfully deleted: {', '.join(deleted)}"
+        elif deleted and not_found:
+            return True, f"Deleted: {', '.join(deleted)}. Not found: {', '.join(not_found)}"
+        else:
+            return False, f"Databases not found: {', '.join(not_found)}"
+    except Exception as e:
+        return False, f"Error deleting databases: {e}"

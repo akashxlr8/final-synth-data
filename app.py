@@ -51,7 +51,8 @@ from db_functions import (
     insert_test_data_incrementally,
     insert_synthetic_data_into_db,
     generate_data_structure,
-    extract_sql_query
+    extract_sql_query,
+    delete_databases  # Add this import
 )
 
 # call llm for writing sql query for test data extraction if exists in sqlite database
@@ -138,66 +139,59 @@ def call_llm_for_pandas_query(user_prompt, table_name="customer"):
 # call llm for generating test data if data not exists in sqlite database
 def call_llm_to_generate_test_data(test_condition, table_name, reference_dataset=None):
     try:
+        # Connect to the database to get schema and sample data
+        conn = sqlite3.connect("customer.db")
+        
+        # Get table schema
+        schema_query = f"PRAGMA table_info({table_name})"
+        schema_df = pd.read_sql_query(schema_query, conn)
+        
+        # Format the schema for the prompt
+        schema_description = "\n".join([
+            f"- {row['name']} ({row['type']})"
+            for _, row in schema_df.iterrows()
+        ])
+        
+        # Get sample data (first few rows) for reference
+        sample_query = f"SELECT * FROM {table_name} LIMIT 5"
+        sample_df = pd.read_sql_query(sample_query, conn)
+        conn.close()
+        
+        # Convert sample data to CSV string for the prompt
+        reference_data = sample_df.to_csv(index=False)
+        
+        # Include system prompt
+        system_prompt = TEST_DATA_GENERATION_SYSTEM_PROMPT
+        
         if data_storage_option == "SQLite":
-            # Generate data structure from the database
-            # data_structure = generate_data_structure(table_name)
-
-            # Construct the prompt
-            system_prompt =f"""You are an advanced data generator. Based on the given conditions and structure, you need to create realistic test data in a tabular format. Follow these instructions strictly:"""
+            # Use the dynamic SQLite prompt
             user_prompt = TEST_DATA_GENERATION_SQLITE_PROMPT.format(
                 test_condition=test_condition,
-                reference_dataset=reference_dataset
+                schema_description=schema_description,
+                reference_data=reference_data
             )
-            # Call LLM to generate test data
-            
-            response = llm.invoke([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ])
-            
-            # Get the response text
-            generated_text = response.content
-            logger.info(f"Generated test data: {generated_text}")
-            
-            # Convert the CSV response into a pandas DataFrame
-            test_data = pd.read_csv(io.StringIO(generated_text)) #type: ignore
-            logger.debug(f"Test data: {test_data}")
         else:
-            # Construct the LLM prompt for pandas DataFrame
-            system_prompt =f"""You are an advanced data generator. Based on the given conditions and structure, you need to create realistic test data in a tabular format. Follow these instructions strictly:"""
+            # Use the dynamic Pandas prompt
             user_prompt = TEST_DATA_GENERATION_PANDAS_PROMPT.format(
                 test_condition=test_condition,
-                reference_dataset=reference_dataset
+                schema_description=schema_description,
+                reference_data=reference_data
             )
-            
-            
-            
-            
-            # print(user_prompt)
-            # Call Cohere to generate test data
-            ### replace with azure chatgpt 4.0 code
-            response = llm.invoke([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ])
-
-            # # Get the response text
-            generated_text = response.content
-            logger.debug(f"Generated test data: {generated_text}")
-            # response = co.chat(
-            #     model='command-r-plus-08-2024',
-            #     messages = [{"role":"system","content":system_prompt},
-            #                 {"role":"user","content":user_prompt}],
-            
-            # )
-
-            # Get the response text
-            # generated_text = response.message.content[0].text
-            print(generated_text)
-            # Convert the CSV response into a pandas DataFrame
         
-            test_data = pd.read_csv(io.StringIO(generated_text)) #type: ignore
-
+        # Call LLM with the dynamic prompts
+        response = llm.invoke([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ])
+        
+        # Process response as before
+        generated_text = response.content
+        logger.info(f"Generated test data: {generated_text}")
+        
+        # Convert the CSV response into a pandas DataFrame
+        test_data = pd.read_csv(io.StringIO(generated_text))
+        logger.debug(f"Test data: {test_data}")
+        
         return test_data
 
     except Exception as e:
@@ -396,6 +390,28 @@ with st.sidebar:
     st.markdown("9. Generate Synthetic Data – based on the trained model.")
     st.markdown("10, Incrementally Insert Test data into Test-Bed database.")
 
+    # Add a separator
+    st.markdown("---")
+    
+    # Add "Database Management" section
+    st.header("Database Management")
+    
+    # Add a delete databases button with confirmation
+    if st.button("Delete All Databases", key="delete_db_button"):
+        # Display a confirmation message
+        st.warning("Are you sure you want to delete both customer.db and customer_testbed.db?")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Yes, Delete", key="confirm_delete"):
+                success, message = delete_databases()
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+        with col2:
+            if st.button("Cancel", key="cancel_delete"):
+                st.info("Database deletion canceled.")
+
 # Add a toggle button to select between SQLite and Pandas DataFrame
 st.sidebar.subheader("Select Data Storage Option")
 data_storage_option = st.sidebar.radio(
@@ -444,28 +460,6 @@ if data_storage_option == "SQLite":
             st.success("TestBed database `customer_testbed.db` created successfully!")
         else:
             st.error("Failed to create Test Bed database.")
-
-# Step 3: Column Mapping and Metadata
-# if uploaded_file:
-#     st.subheader("Step 3: Define Column Types")
-#     if not column_info.empty:
-#         column_types = {}
-#         cols = st.columns(4)  # Display 4 columns per row
-#         for index, column_name in enumerate(column_info["name"]):
-#             col = cols[index % 4]  # Assign to one of the 4 columns
-#             with col:
-#                 column_type = st.selectbox(
-#                     f"Type for `{column_name}`",
-#                     ["categorical", "numerical", "boolean", "ID"],
-#                     key=column_name
-#                 )
-#                 column_types[column_name] = column_type
-
-#         # Save metadata
-#         if st.button("Save Column Metadata"):
-#             metadata = create_sdv_metadata(column_types)
-#             st.json(metadata)
-#             st.success("Column metadata saved successfully!")
 
 # Step 4: SQL Generation
 st.subheader("Describe your test case scenario")
