@@ -1,0 +1,55 @@
+{
+    "tables": {
+        "data": {
+            "columns": {
+                "index":{
+                    "sdtype":"id",
+                    "regex_format": "[1-9][0-9[0-9[0-9][0-9][0-9][0-9]"
+                },
+                "acct_num": {
+                    "sdtype": "numerical"
+                },
+                "ccid": {
+                    "sdtype": "categorical"
+                },
+                "lobs": {
+                    "sdtype": "categorical"
+                },
+                "govt_issued_id": {
+                    "sdtype": "numerical"                   
+                },
+                "phone_number": {
+                    "sdtype": "categorical"
+                },
+                "first_name": {
+                    "sdtype": "first_name"
+                },
+                "last_name": {
+                    "sdtype": "last_name"
+
+                },
+                "address_line_one": {
+                    "sdtype": "address"
+                },
+                "city_name": {
+                    "sdtype": "categorical"
+                },
+                "state_code": {
+                    "sdtype": "administrative_unit"
+                },
+                "postal_code": {
+                    "sdtype": "postcode"
+                },
+                "zip4_code": {
+                    "sdtype": "categorical"
+                },
+                "country": {
+                    "sdtype": "categorical"
+                }
+            },
+            "primary_key": "index"
+        }
+    },
+    "relationships": [],
+    "METADATA_SPEC_VERSION": "V1"
+}
