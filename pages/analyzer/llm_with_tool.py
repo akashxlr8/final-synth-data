@@ -1,5 +1,6 @@
-from langchain_openai import AzureChatOpenAI
-from langchain.tools import Tool
+from langchain_cohere import ChatCohere
+# from langchain_openai import AzureChatOpenAI
+# from langchain.tools import Tool
 # from langchain_experimental.utilities import PythonREPL
 from langchain.output_parsers import PydanticOutputParser
 
@@ -20,16 +21,17 @@ class CodeOutput(BaseModel):
 class CodeEnabledLLM:
     def __init__(self):
         # Initialize Azure OpenAI client
-        self.llm = AzureChatOpenAI(
-            azure_deployment="bfsi-genai-demo-gpt-4o",
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            api_version="2024-05-01-preview",
-            temperature=0,
-            max_tokens=None,
-            timeout=None,
-            max_retries=2,
-        )
+        # self.llm = AzureChatOpenAI(
+        #     azure_deployment="bfsi-genai-demo-gpt-4o",
+        #     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        #     api_version="2024-05-01-preview",
+        #     temperature=0,
+        #     max_tokens=None,
+        #     timeout=None,
+        #     max_retries=2,
+        # )
 
+        self.llm = ChatCohere()
         # self.llm=self.llm.with_structured_output(CodeOutput)
         
         # Initialize Python REPL tool
@@ -88,7 +90,7 @@ class CodeEnabledLLM:
             # Parse the output using the PydanticOutputParser
             # parsed_output = self.parser.parse(str(response.content))
             # return parsed_output
-            return response.content
+            return response.content 
         except Exception as e:
             return CodeOutput(code="Error during analysis", explanation=str(e))
 

@@ -1,4 +1,5 @@
-from langchain_openai import AzureChatOpenAI
+from langchain_cohere import ChatCohere
+# from langchain_openai import AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -23,15 +24,16 @@ load_dotenv()
 class DatasetAnalyzer:
     def __init__(self):
         # Initialize Azure OpenAI client
-        self.llm = AzureChatOpenAI(
-            azure_deployment="bfsi-genai-demo-gpt-4o",
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            api_version="2024-05-01-preview",
-            temperature=0,
-            max_tokens=None,
-            timeout=None,
-            max_retries=2,
-        )
+        # self.llm = AzureChatOpenAI(
+        #     azure_deployment="bfsi-genai-demo-gpt-4o",
+        #     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        #     api_version="2024-05-01-preview",
+        #     temperature=0,
+        #     max_tokens=None,
+        #     timeout=None,
+        #     max_retries=2,
+        # )
+        self.llm = ChatCohere()
         
         self.parser = PydanticOutputParser(pydantic_object=DatasetQuestions)
         
