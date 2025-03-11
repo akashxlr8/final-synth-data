@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from pages.analyzer.llm_analyzer import DatasetAnalyzer, AnalyticalQuestion
 from pages.analyzer.db import AnalysisDatabase
+from prompts import CODE_GENERATOR_PROMPT
 
 # Load environment variables
 load_dotenv()
@@ -245,9 +246,15 @@ if df is not None and not df.empty:
                             {df.describe().to_string()}
                             """
                             
+                            prompt = CODE_GENERATOR_PROMPT.format(
+                                df_preview=df.head().to_string(),
+                                question=q.question,
+                                category=q.category
+                            )
+                            
                             # Call LLM for analysis
                             response = llm.invoke([
-                                {"role": "system", "content": "You are a data analysis expert. Provide a detailed analysis based on the question. Include specific insights, visualizations that would be helpful, and key findings."},
+                                {"role": "system", "content": prompt},
                                 {"role": "user", "content": data_summary}
                             ])
                             
@@ -259,8 +266,61 @@ if df is not None and not df.empty:
                                     explanation=response.content,
                                     result=""
                                 )
-                            
+
+                            # First display the raw response content
                             st.markdown(response.content)
+
+                            # Try to parse the response content as JSON to extract code and explanation
+                            try:
+                                import json
+                                import re
+                                
+                                # Try to find and extract JSON content from the response
+                                json_match = re.search(r'(\{.*?\})', response.content, re.DOTALL)
+                                
+                                if json_match:
+                                    json_str = json_match.group(1)
+                                    response_json = json.loads(json_str)
+                                    
+                                    if "code" in response_json and "explanation" in response_json:
+                                        # Display the code with proper syntax highlighting using st.code()
+                                        st.subheader("Generated Code")
+                                        st.code(response_json["code"], language="python")
+                                        
+                                        # Display the explanation
+                                        st.subheader("Explanation")
+                                        st.write(response_json["explanation"])
+                                        
+                                        # Add a button to run the code on the current data
+                                        if st.button("Run Analysis", key=f"run_analysis_{i}"):
+                                            try:
+                                                with st.spinner("Running analysis..."):
+                                                    # Create a local environment with the dataframe
+                                                    local_namespace = {"df": df}
+                                                    # Execute the code
+                                                    exec(response_json["code"], {}, local_namespace)
+                                                    
+                                                    # If the code produces a result variable, display it
+                                                    if "result" in local_namespace:
+                                                        st.subheader("Analysis Result")
+                                                        result = local_namespace["result"]
+                                                        
+                                                        # Check if result is a DataFrame
+                                                        if isinstance(result, pd.DataFrame):
+                                                            st.dataframe(result)
+                                                        # Check if result is a matplotlib figure
+                                                        elif "matplotlib.figure" in str(type(result)):
+                                                            st.pyplot(result)
+                                                        # Check if result is a plotly figure
+                                                        elif "plotly.graph_objects" in str(type(result)):
+                                                            st.plotly_chart(result)
+                                                        # Otherwise, just display as text
+                                                        else:
+                                                            st.write(result)
+                                            except Exception as run_err:
+                                                st.error(f"Error running the analysis: {str(run_err)}")
+                            except Exception as e:
+                                st.warning(f"Could not parse JSON from response: {str(e)}")
         
         # Add custom question input
         st.subheader("Add Your Own Analysis Question")

@@ -106,3 +106,31 @@ Follow these instructions strictly:
 
 Now, generate realistic test data that strictly adheres to the given conditions. Return only CSV data that can be directly loaded into pandas. No backticks, no explanations, and no extra text like ```sql, python, code, etc.```.
 """
+
+
+CODE_GENERATOR_PROMPT = """
+            You are an expert data analyst with advanced Python skills, especially working with the Pandas library. Your objective is to analyze a dataset, provided as a Pandas DataFrame glimpse, to answer a specific question within a given category.
+
+            Dataset glimpse (DataFrame.head()):
+            {df_preview}
+
+            Task:
+
+            Write valid Python code that performs the analysis required to answer the following question:
+            "{question}"
+            Ensure your code includes any necessary imports (e.g., import pandas as pd) and is ready to run.
+            Provide a short explanation (one to two sentences) summarizing what the code does.
+            Return your answer strictly in JSON format with the following structure (do not include any additional text outside the JSON object):
+            {{
+            "code": "your valid Python code here",
+            "explanation": "brief explanation of what the code does"
+            }}
+
+            Example:
+            {{
+            "code": "import pandas as pd\\nresult = (df['col1'].mean() * df['col2'].sum())\\nprint(result)",
+            "explanation": "Calculates the mean of col1 and multiplies it by the sum of col2, then prints the result."
+            }}
+
+            Category: "{category}"
+"""
