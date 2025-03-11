@@ -7,8 +7,15 @@ import numpy as np
 from langchain_cohere import ChatCohere
 from dotenv import load_dotenv
 
+from pages.analyzer.llm_analyzer import DatasetAnalyzer, AnalyticalQuestion
+from pages.analyzer.db import AnalysisDatabase
+
 # Load environment variables
 load_dotenv()
+
+# Initialize analyzer and database
+analyzer = DatasetAnalyzer()
+db = AnalysisDatabase()
 
 from logging_config import get_logger
 logger = get_logger(__name__)
@@ -176,51 +183,140 @@ if df is not None and not df.empty:
     with analysis_tabs[2]:
         st.header("AI-Powered Analysis")
         
-        analysis_question = st.text_area(
-            "Ask a question about your data:",
-            placeholder="Example: What are the key patterns in this data? or How are the different categories distributed?"
-        )
+        # AI-Generated questions from llm_analyzer.py
+        if "dataset_id" not in st.session_state:
+            # Save dataset to database
+            if df is not None and not df.empty:
+                dataset_name = "Uploaded CSV" if data_source == "Upload CSV" else f"{data_source}"
+                try:
+                    dataset_id = db.save_dataset(
+                        filename=dataset_name,
+                        row_count=df.shape[0],
+                        column_count=df.shape[1],
+                        columns=df.columns.tolist()
+                    )
+                    st.session_state.dataset_id = dataset_id
+                except Exception as e:
+                    st.error(f"Error saving dataset to database: {str(e)}")
         
-        if st.button("Generate Analysis"):
-            if analysis_question:
-                with st.spinner("AI is analyzing your data..."):
-                    # Prepare data summary to send to LLM
-                    data_summary = f"""
-                    Data Summary:
-                    - Total records: {len(df)}
-                    - Columns: {', '.join(df.columns.tolist())}
-                    - Numerical columns: {', '.join(df.select_dtypes(include=[np.number]).columns.tolist())}
-                    - Categorical columns: {', '.join(df.select_dtypes(exclude=[np.number]).columns.tolist())}
-                    - First few records:\n{df.head(3).to_string()}
+        if st.button("Generate Analytical Questions", key="generate_ai_questions"):
+            with st.spinner("AI is analyzing your dataset to generate insightful questions..."):
+                try:
+                    questions = analyzer.generate_questions(df)
+                    st.session_state.ai_questions = questions
                     
-                    Basic statistics:
-                    {df.describe().to_string()}
+                    # Save questions to database if we have a dataset ID
+                    if "dataset_id" in st.session_state:
+                        for q in questions:
+                            question_id = db.save_question(
+                                dataset_id=st.session_state.dataset_id,
+                                question=q.question,
+                                category=q.category,
+                                reasoning=q.reasoning
+                            )
+                            # Store question_id for later use
+                            q.db_id = question_id
+                except Exception as e:
+                    st.error(f"Error generating questions: {str(e)}")
+        
+        # Display generated questions
+        if "ai_questions" in st.session_state:
+            st.subheader("AI-Generated Analysis Questions")
+            for i, q in enumerate(st.session_state.ai_questions, 1):
+                with st.expander(f"{i}. {q.question}"):
+                    st.write(f"**Category:** {q.category}")
+                    st.write(f"**Reasoning:** {q.reasoning}")
                     
-                    Question: {analysis_question}
-                    """
-                    
-                    # Call LLM for analysis
-                    response = llm.invoke([
-                        {"role": "system", "content": "You are a data analysis expert. Analyze the provided data summary and answer the user's question. Provide insights, patterns, and observations based on the available information."},
-                        {"role": "user", "content": data_summary}
-                    ])
-                    
-                    # Display results
-                    st.subheader("AI Analysis")
-                    st.markdown(response.content)
-                    
-                    # Suggest followup questions
-                    st.subheader("Suggested Follow-up Questions")
-                    followup_prompt = f"Based on the data summary and the original question '{analysis_question}', suggest 3 follow-up questions that would be valuable to ask about this dataset. Format each suggestion as a bullet point."
-                    
-                    followup_response = llm.invoke([
-                        {"role": "system", "content": "You are a data analysis expert. Suggest follow-up questions."},
-                        {"role": "user", "content": followup_prompt}
-                    ])
-                    
-                    st.markdown(followup_response.content)
+                    # Add "Analyze this question" button
+                    if st.button(f"Analyze Question {i}", key=f"analyze_q_{i}"):
+                        with st.spinner("Analyzing question..."):
+                            # Prepare data summary
+                            data_summary = f"""
+                            Data Summary:
+                            - Total records: {len(df)}
+                            - Question: {q.question}
+                            - Question Category: {q.category}
+                            - Question Reasoning: {q.reasoning}
+                            
+                            The first few rows of the data:
+                            {df.head(5).to_string()}
+                            
+                            Statistical summary:
+                            {df.describe().to_string()}
+                            """
+                            
+                            # Call LLM for analysis
+                            response = llm.invoke([
+                                {"role": "system", "content": "You are a data analysis expert. Provide a detailed analysis based on the question. Include specific insights, visualizations that would be helpful, and key findings."},
+                                {"role": "user", "content": data_summary}
+                            ])
+                            
+                            # Store and display the analysis
+                            if "dataset_id" in st.session_state and hasattr(q, "db_id"):
+                                db.save_code_analysis(
+                                    question_id=q.db_id,
+                                    code="",  # No actual code here
+                                    explanation=response.content,
+                                    result=""
+                                )
+                            
+                            st.markdown(response.content)
+        
+        # Add custom question input
+        st.subheader("Add Your Own Analysis Question")
+        custom_question = st.text_input("Enter your own analytical question:")
+        custom_category = st.selectbox(
+            "Select a category for your question:",
+            ['Trend Analysis', 'Correlation', 'Distribution', 'Outliers', 'Pattern Recognition', 'Custom']
+        )
+        custom_reasoning = st.text_area("Explain your reasoning for this question:")
+        
+        if st.button("Add Question", key="add_custom_question"):
+            if custom_question:
+                # Create a custom question
+                custom_q = AnalyticalQuestion(
+                    question=custom_question,
+                    category=custom_category or "Custom",
+                    reasoning=custom_reasoning or "No reasoning provided"
+                )
+                
+                # Add to session state
+                if "ai_questions" not in st.session_state:
+                    st.session_state.ai_questions = [custom_q]
+                else:
+                    st.session_state.ai_questions.append(custom_q)
+                
+                # Save to database if we have a dataset ID
+                if "dataset_id" in st.session_state:
+                    question_id = db.save_question(
+                        dataset_id=st.session_state.dataset_id,
+                        question=custom_question,
+                        category=custom_category or "Custom",
+                        reasoning=custom_reasoning or "No reasoning provided",
+                        is_custom=True
+                    )
+                    custom_q.db_id = question_id
+                
+                st.success("Question added successfully!")
+                st.experimental_rerun()  # Rerun to show the updated questions list
             else:
-                st.warning("Please enter a question to analyze")
+                st.warning("Please enter a question to add.")
+                
+        # Show analysis history if available
+        if "dataset_id" in st.session_state:
+            st.subheader("Analysis History")
+            try:
+                history = db.get_analysis_history()
+                if history:
+                    for i, entry in enumerate(history):
+                        with st.expander(f"{entry['question']} ({entry['category']})"):
+                            st.write(f"**Dataset:** {entry['filename']}")
+                            st.write(f"**Analysis:**\n{entry['explanation']}")
+                            st.write(f"**Time:** {entry['execution_time']}")
+                else:
+                    st.info("No analysis history found.")
+            except Exception as e:
+                st.error(f"Error loading analysis history: {str(e)}")
 
 else:
     st.info("No data loaded. Please select a data source.")

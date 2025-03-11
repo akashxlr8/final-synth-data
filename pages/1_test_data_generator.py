@@ -6,7 +6,7 @@ import io
 import json
 from sdv.metadata import Metadata
 import cohere
-from langchain_openai import AzureChatOpenAI
+# from langchain_openai import AzureChatOpenAI
 from dotenv import load_dotenv
 import os, time
 import pickle
