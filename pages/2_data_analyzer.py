@@ -32,6 +32,9 @@ st.set_page_config(page_title="Data Analyzer", layout="wide")
 # Page title
 st.title("Data Analyzer")
 
+# Initialize uploaded_file as None first
+uploaded_file = None
+
 # Sidebar options
 with st.sidebar:
     st.header("Data Source")
@@ -41,10 +44,13 @@ with st.sidebar:
     )
     
     if data_source == "Upload CSV":
+        # Now the uploaded_file variable is accessible outside the sidebar
         uploaded_file = st.file_uploader("📤 Upload your data file:", type=["csv"])
 
 # Main content
 def load_data(source):
+    global uploaded_file  # Access the global variable
+    
     if source == "Customer Database":
         try:
             return load_from_sqlite(table_name="customer", db_name="customer.db")
@@ -58,8 +64,12 @@ def load_data(source):
             st.error(f"Error loading customer testbed database: {e}")
             return None
     else:  # Uploaded file
-        if 'uploaded_file' in locals() and uploaded_file is not None:
-            return pd.read_csv(uploaded_file)
+        if uploaded_file is not None:  # Check the global variable
+            try:
+                return pd.read_csv(uploaded_file)
+            except Exception as e:
+                st.error(f"Error reading CSV file: {e}")
+                return None
         else:
             st.warning("Please upload a CSV file")
             return None
@@ -276,51 +286,79 @@ if df is not None and not df.empty:
                                 import re
                                 
                                 # Try to find and extract JSON content from the response
-                                json_match = re.search(r'(\{.*?\})', response.content, re.DOTALL)
+                                # The regex needs to be more comprehensive to capture the entire JSON object
+                                json_match = re.search(r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}', response.content, re.DOTALL)
                                 
                                 if json_match:
-                                    json_str = json_match.group(1)
-                                    response_json = json.loads(json_str)
+                                    json_str = json_match.group(0)  # Changed from group(1) to group(0) to get the entire match
                                     
-                                    if "code" in response_json and "explanation" in response_json:
-                                        # Display the code with proper syntax highlighting using st.code()
-                                        st.subheader("Generated Code")
-                                        st.code(response_json["code"], language="python")
+                                    # Clean up any extra characters that might interfere with JSON parsing
+                                    json_str = json_str.strip()
+                                    
+                                    # Try parsing the JSON
+                                    try:
+                                        response_json = json.loads(json_str)
                                         
-                                        # Display the explanation
-                                        st.subheader("Explanation")
-                                        st.write(response_json["explanation"])
-                                        
-                                        # Add a button to run the code on the current data
-                                        if st.button("Run Analysis", key=f"run_analysis_{i}"):
-                                            try:
-                                                with st.spinner("Running analysis..."):
-                                                    # Create a local environment with the dataframe
-                                                    local_namespace = {"df": df}
-                                                    # Execute the code
-                                                    exec(response_json["code"], {}, local_namespace)
-                                                    
-                                                    # If the code produces a result variable, display it
-                                                    if "result" in local_namespace:
-                                                        st.subheader("Analysis Result")
-                                                        result = local_namespace["result"]
+                                        if "code" in response_json and "explanation" in response_json:
+                                            # Don't display raw content anymore, just show the formatted parts
+                                            st.markdown("### Generated Code")
+                                            st.code(response_json["code"], language="python")
+                                            
+                                            st.markdown("### Explanation")
+                                            st.write(response_json["explanation"])
+                                            
+                                            # Save the parsed code to the database
+                                            if "dataset_id" in st.session_state and hasattr(q, "db_id"):
+                                                db.save_code_analysis(
+                                                    question_id=q.db_id,
+                                                    code=response_json["code"],
+                                                    explanation=response_json["explanation"],
+                                                    result=""
+                                                )
+                                            
+                                            # Add a button to run the code on the current data
+                                            if st.button("Run Analysis", key=f"run_analysis_{i}"):
+                                                try:
+                                                    with st.spinner("Running analysis..."):
+                                                        # Create a local environment with the dataframe
+                                                        local_namespace = {"df": df, "plt": plt, "np": np, "pd": pd, "sns": sns}
                                                         
-                                                        # Check if result is a DataFrame
-                                                        if isinstance(result, pd.DataFrame):
-                                                            st.dataframe(result)
-                                                        # Check if result is a matplotlib figure
-                                                        elif "matplotlib.figure" in str(type(result)):
-                                                            st.pyplot(result)
-                                                        # Check if result is a plotly figure
-                                                        elif "plotly.graph_objects" in str(type(result)):
-                                                            st.plotly_chart(result)
-                                                        # Otherwise, just display as text
-                                                        else:
-                                                            st.write(result)
-                                            except Exception as run_err:
-                                                st.error(f"Error running the analysis: {str(run_err)}")
+                                                        # Execute the code
+                                                        exec(response_json["code"], {}, local_namespace)
+                                                        
+                                                        # Check for matplotlib figures
+                                                        for var_name, var_value in local_namespace.items():
+                                                            if str(type(var_value)).find("matplotlib.figure.Figure") > -1:
+                                                                st.pyplot(var_value)
+                                                        
+                                                        # If the code produces a result variable, display it
+                                                        if "result" in local_namespace:
+                                                            st.subheader("Analysis Result")
+                                                            result = local_namespace["result"]
+                                                            
+                                                            # Handle different result types
+                                                            if isinstance(result, pd.DataFrame):
+                                                                st.dataframe(result)
+                                                            elif "matplotlib.figure" in str(type(result)):
+                                                                st.pyplot(result)
+                                                            elif "plotly.graph_objects" in str(type(result)):
+                                                                st.plotly_chart(result)
+                                                            else:
+                                                                st.write(result)
+                                                except Exception as run_err:
+                                                    st.error(f"Error running the analysis: {str(run_err)}")
+                                        else:
+                                            st.warning("Generated response isn't in the expected format. Missing 'code' or 'explanation' fields.")
+                                    except json.JSONDecodeError as json_err:
+                                        st.error(f"Failed to parse JSON from response: {json_err}")
+                                        st.code(json_str, language="json")  # Show the problematic JSON string
+                                else:
+                                    # If no JSON format is detected, display the raw content
+                                    st.warning("The response doesn't contain properly formatted JSON.")
+                                    st.markdown("### Raw Response")
+                                    st.markdown(response.content)
                             except Exception as e:
-                                st.warning(f"Could not parse JSON from response: {str(e)}")
+                                st.error(f"Error processing response: {str(e)}")
         
         # Add custom question input
         st.subheader("Add Your Own Analysis Question")
