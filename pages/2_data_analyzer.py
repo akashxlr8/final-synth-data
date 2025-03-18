@@ -320,16 +320,55 @@ if df is not None and not df.empty:
                                             if st.button("Run Analysis", key=f"run_analysis_{i}"):
                                                 try:
                                                     with st.spinner("Running analysis..."):
-                                                        # Create a local environment with the dataframe
-                                                        local_namespace = {"df": df, "plt": plt, "np": np, "pd": pd, "sns": sns}
+                                                        # Create a local environment with the dataframe and necessary libraries
+                                                        import plotly.express as px
+                                                        import plotly.graph_objects as go
+                                                        
+                                                        local_namespace = {
+                                                            "df": df, 
+                                                            "plt": plt, 
+                                                            "np": np, 
+                                                            "pd": pd, 
+                                                            "sns": sns,
+                                                            "px": px,
+                                                            "go": go,
+                                                            "st": st
+                                                        }
+                                                        
+                                                        # Modify code to remove fig.show() if present
+                                                        code_to_execute = response_json["code"]
+                                                        code_to_execute = code_to_execute.replace("fig.show()", "")
                                                         
                                                         # Execute the code
-                                                        exec(response_json["code"], {}, local_namespace)
+                                                        exec(code_to_execute, {}, local_namespace)
                                                         
-                                                        # Check for matplotlib figures
+                                                        # Display status
+                                                        st.success("Analysis completed successfully")
+                                                        
+                                                        # Flag to track if we've displayed a visualization
+                                                        displayed_viz = False
+                                                        
+                                                        # Check for plotly figure in the namespace
+                                                        if 'fig' in local_namespace:
+                                                            st.subheader("Analysis Visualization")
+                                                            st.plotly_chart(local_namespace['fig'], use_container_width=True)
+                                                            displayed_viz = True
+                                                        
+                                                        # Check for other plotly figures with different names
                                                         for var_name, var_value in local_namespace.items():
-                                                            if str(type(var_value)).find("matplotlib.figure.Figure") > -1:
-                                                                st.pyplot(var_value)
+                                                            if not displayed_viz and str(type(var_value)).find("plotly.graph_objs") > -1:
+                                                                st.subheader("Analysis Visualization")
+                                                                st.plotly_chart(var_value, use_container_width=True)
+                                                                displayed_viz = True
+                                                                break
+                                                        
+                                                        # Also check for matplotlib figures (as a fallback)
+                                                        if not displayed_viz:
+                                                            for var_name, var_value in local_namespace.items():
+                                                                if str(type(var_value)).find("matplotlib.figure.Figure") > -1:
+                                                                    st.pyplot(var_value)
+                                                                    displayed_viz = True
+                                                                    break
                                                         
                                                         # If the code produces a result variable, display it
                                                         if "result" in local_namespace:
@@ -339,14 +378,38 @@ if df is not None and not df.empty:
                                                             # Handle different result types
                                                             if isinstance(result, pd.DataFrame):
                                                                 st.dataframe(result)
-                                                            elif "matplotlib.figure" in str(type(result)):
+                                                            elif not displayed_viz and "plotly" in str(type(result)):
+                                                                st.plotly_chart(result, use_container_width=True)
+                                                            elif not displayed_viz and "matplotlib" in str(type(result)):
                                                                 st.pyplot(result)
-                                                            elif "plotly.graph_objects" in str(type(result)):
-                                                                st.plotly_chart(result)
                                                             else:
                                                                 st.write(result)
+                                                        
+                                                        # If no visualization or result was displayed, look for printed output
+                                                        if not displayed_viz and "result" not in local_namespace:
+                                                            import io
+                                                            import sys
+                                                            
+                                                            # Capture print output
+                                                            old_stdout = sys.stdout
+                                                            new_stdout = io.StringIO()
+                                                            sys.stdout = new_stdout
+                                                            
+                                                            # Re-execute to capture prints
+                                                            exec(code_to_execute, {}, local_namespace)
+                                                            
+                                                            # Get printed output
+                                                            output = new_stdout.getvalue()
+                                                            sys.stdout = old_stdout
+                                                            
+                                                            if output.strip():
+                                                                st.subheader("Output")
+                                                                st.code(output, language="text")
+                                                
                                                 except Exception as run_err:
                                                     st.error(f"Error running the analysis: {str(run_err)}")
+                                                    import traceback
+                                                    st.code(traceback.format_exc(), language="python")
                                         else:
                                             st.warning("Generated response isn't in the expected format. Missing 'code' or 'explanation' fields.")
                                     except json.JSONDecodeError as json_err:

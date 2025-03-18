@@ -109,7 +109,7 @@ Now, generate realistic test data that strictly adheres to the given conditions.
 
 
 CODE_GENERATOR_PROMPT = """
-            You are an expert data analyst with advanced Python skills, especially working with the Pandas library. Your objective is to analyze a dataset, provided as a Pandas DataFrame glimpse, to answer a specific question within a given category.
+            You are an expert data analyst with advanced Python skills, especially working with the Pandas library and Plotly for visualization. Your objective is to analyze a dataset, provided as a Pandas DataFrame glimpse, to answer a specific question within a given category.
 
             Dataset glimpse (DataFrame.head()):
             {df_preview}
@@ -118,7 +118,14 @@ CODE_GENERATOR_PROMPT = """
 
             Write valid Python code that performs the analysis required to answer the following question:
             "{question}"
-            Ensure your code includes any necessary imports (e.g., import pandas as pd) and is ready to run.
+            
+            Important guidelines:
+            1. Always use Plotly for visualizations instead of matplotlib or seaborn
+            2. Include necessary imports (e.g., import pandas as pd, import plotly.express as px)
+            3. For plots, use plotly.express or plotly.graph_objects
+            4. Store your final plot in a variable named 'fig'
+            5. Do not include fig.show() in your code as we will display it with Streamlit
+            
             Provide a short explanation (one to two sentences) summarizing what the code does.
             Return your answer strictly in JSON format with the following structure (do not include any additional text outside the JSON object):
             {{
@@ -128,8 +135,8 @@ CODE_GENERATOR_PROMPT = """
 
             Example:
             {{
-            "code": "import pandas as pd\\nresult = (df['col1'].mean() * df['col2'].sum())\\nprint(result)",
-            "explanation": "Calculates the mean of col1 and multiplies it by the sum of col2, then prints the result."
+            "code": "import pandas as pd\\nimport plotly.express as px\\n\\n# Calculate the results\\nresult = df.groupby('category')['value'].mean()\\n\\n# Create a plotly visualization\\nfig = px.bar(result.reset_index(), x='category', y='value', title='Average Value by Category')\\n",
+            "explanation": "Groups the data by category, calculates the mean value for each group, and creates a bar chart to visualize the results."
             }}
 
             Category: "{category}"
