@@ -17,7 +17,28 @@ This project is a Streamlit application that provides intelligent tools for work
     ```bash
     pip install -r requirements.txt
     ```
-3.  Set up your environment variables by creating a `.env` file with your API keys.
+3.  Set up your API keys by creating a `.streamlit/secrets.toml` file with your credentials:
+    ```toml
+    [cohere]
+    api_key = "your_actual_cohere_api_key"
+    
+    [azure]
+    openai_endpoint = "https://your-resource.openai.azure.com/"
+    openai_api_key = "your_actual_azure_api_key"
+    deployment_name = "gpt-4o"
+    
+    [openai]
+    api_key = "your_actual_openai_api_key"
+    
+    [app]
+    debug_mode = false
+    log_level = "INFO"
+    ```
+    
+    **Important:** 
+    - Replace placeholder values with your actual API keys
+    - The `.streamlit/secrets.toml` file is already added to `.gitignore` for security
+    - You only need to configure the API service you plan to use (Cohere, Azure OpenAI, or OpenAI)
 
 ## Usage
 
