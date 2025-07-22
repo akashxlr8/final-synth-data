@@ -7,13 +7,9 @@ import json
 from sdv.metadata import Metadata
 import cohere
 # from langchain_openai import AzureChatOpenAI
-from dotenv import load_dotenv
 import os, time
 import pickle
 from sdv.single_table import CTGANSynthesizer, GaussianCopulaSynthesizer
-
-# Load environment variables
-load_dotenv()
 
 from logging_config import get_logger
 logger = get_logger(__name__)
@@ -31,7 +27,19 @@ logger = get_logger(__name__)
 
 from langchain_cohere import ChatCohere
 from langchain_core.messages import HumanMessage
-llm = ChatCohere()
+
+# Initialize LLM with Streamlit secrets
+try:
+    # Try to get API key from Streamlit secrets
+    cohere_api_key = st.secrets.get("cohere", {}).get("api_key")
+    if cohere_api_key:
+        llm = ChatCohere(cohere_api_key=cohere_api_key)
+    else:
+        # Fallback to environment variable or default
+        llm = ChatCohere()
+except Exception as e:
+    logger.warning(f"Could not access Streamlit secrets, using default: {e}")
+    llm = ChatCohere()
 
 from prompts import (
     SQL_GENERATION_PROMPT,
