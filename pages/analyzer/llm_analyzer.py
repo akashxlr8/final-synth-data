@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 import os
 from typing import List
 import pandas as pd
-from dotenv import load_dotenv
+import streamlit as st
 
 from logging_config import get_logger
 logger = get_logger("llm_analyzer")
@@ -20,20 +20,37 @@ class AnalyticalQuestion(BaseModel):
 class DatasetQuestions(BaseModel):
     questions: List[AnalyticalQuestion] = Field(description="List of 5 analytical questions about the dataset")
 
-load_dotenv()
 class DatasetAnalyzer:
     def __init__(self):
-        # Initialize Azure OpenAI client
-        # self.llm = AzureChatOpenAI(
-        #     azure_deployment="bfsi-genai-demo-gpt-4o",
-        #     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        #     api_version="2024-05-01-preview",
-        #     temperature=0,
-        #     max_tokens=None,
-        #     timeout=None,
-        #     max_retries=2,
-        # )
-        self.llm = ChatCohere()
+        # Initialize LLM with Streamlit secrets
+        try:
+            # Try to get API key from Streamlit secrets
+            cohere_api_key = st.secrets.get("cohere", {}).get("api_key")
+            if cohere_api_key:
+                self.llm = ChatCohere(cohere_api_key=cohere_api_key)
+            else:
+                # Fallback to environment variable or default
+                self.llm = ChatCohere()
+        except Exception as e:
+            logger.warning(f"Could not access Streamlit secrets, using default: {e}")
+            self.llm = ChatCohere()
+        
+        # Alternative Azure OpenAI implementation using secrets
+        # try:
+        #     azure_config = st.secrets.get("azure", {})
+        #     if azure_config.get("openai_endpoint") and azure_config.get("openai_api_key"):
+        #         self.llm = AzureChatOpenAI(
+        #             azure_deployment="bfsi-genai-demo-gpt-4o",
+        #             azure_endpoint=azure_config["openai_endpoint"],
+        #             api_key=azure_config["openai_api_key"],
+        #             api_version="2024-05-01-preview",
+        #             temperature=0,
+        #             max_tokens=None,
+        #             timeout=None,
+        #             max_retries=2,
+        #         )
+        # except Exception as e:
+        #     logger.warning(f"Could not initialize Azure OpenAI: {e}")
         
         self.parser = PydanticOutputParser(pydantic_object=DatasetQuestions)
         
