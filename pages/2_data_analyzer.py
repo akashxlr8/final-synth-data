@@ -9,6 +9,7 @@ from langchain_cohere import ChatCohere
 from pages.analyzer.llm_analyzer import DatasetAnalyzer, AnalyticalQuestion
 from pages.analyzer.db import AnalysisDatabase
 from prompts import CODE_GENERATOR_PROMPT
+from secrets_utils import get_cohere_api_key, display_secrets_status
 
 # Initialize analyzer and database
 analyzer = DatasetAnalyzer()
@@ -19,16 +20,66 @@ logger = get_logger(__name__)
 
 # Initialize LLM with Streamlit secrets
 try:
-    # Try to get API key from Streamlit secrets
-    cohere_api_key = st.secrets.get("cohere", {}).get("api_key")
-    if cohere_api_key:
+    cohere_api_key = get_cohere_api_key()
+    if cohere_api_key and cohere_api_key != "your_cohere_api_key_here":
         llm = ChatCohere(cohere_api_key=cohere_api_key)
+        logger.info("Initialized ChatCohere with API key")
     else:
-        # Fallback to environment variable or default
-        llm = ChatCohere()
+        # Create a mock LLM for demo purposes
+        class MockLLM:
+            def invoke(self, messages):
+                from types import SimpleNamespace
+                import json
+                
+                # Create a basic analysis response
+                response = {
+                    "code": """import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Basic data overview
+print("Dataset Shape:", df.shape)
+print("\\nColumn Names:", df.columns.tolist())
+print("\\nData Types:")
+print(df.dtypes)
+
+# Basic statistics
+print("\\nBasic Statistics:")
+print(df.describe())
+
+# Create a simple visualization
+if len(df.columns) > 0:
+    plt.figure(figsize=(10, 6))
+    if df[df.columns[0]].dtype in ['int64', 'float64']:
+        df[df.columns[0]].hist(bins=30)
+        plt.title(f'Distribution of {df.columns[0]}')
+        plt.show()
+    else:
+        df[df.columns[0]].value_counts().head(10).plot(kind='bar')
+        plt.title(f'Top 10 values in {df.columns[0]}')
+        plt.xticks(rotation=45)
+        plt.show()""",
+                    "explanation": "This code provides basic exploratory data analysis including dataset overview, statistics, and a simple visualization based on the first column's data type."
+                }
+                
+                response_obj = SimpleNamespace()
+                response_obj.content = json.dumps(response)
+                return response_obj
+        
+        llm = MockLLM()
+        logger.warning("Using mock LLM - please configure Cohere API key for full functionality")
 except Exception as e:
-    logger.warning(f"Could not access Streamlit secrets, using default: {e}")
-    llm = ChatCohere()
+    logger.error(f"Error initializing LLM: {e}")
+    # Fallback to mock implementation
+    class MockLLM:
+        def invoke(self, messages):
+            from types import SimpleNamespace
+            import json
+            response = {"code": "print('LLM not available')", "explanation": "LLM initialization failed"}
+            response_obj = SimpleNamespace()
+            response_obj.content = json.dumps(response)
+            return response_obj
+    llm = MockLLM()
 
 from db_functions import load_from_sqlite
 
@@ -89,6 +140,9 @@ st.set_page_config(page_title="Data Analyzer", layout="wide")
 
 # Main layout
 st.title("AI Data Analysis Assistant")
+
+# Display secrets configuration status
+display_secrets_status()
 
 # Create two main columns for better organization
 col1, col2 = st.columns([1, 2])
