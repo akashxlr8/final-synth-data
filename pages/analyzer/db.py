@@ -185,3 +185,33 @@ class AnalysisDatabase:
         
         conn.close()
         return history
+
+    def get_dataset_with_questions(self, dataset_id):
+        """Get a dataset and all its questions."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Get dataset info
+        cursor.execute(
+            "SELECT * FROM datasets WHERE id = ?",
+            (dataset_id,)
+        )
+        dataset = cursor.fetchone()
+        
+        if not dataset:
+            conn.close()
+            return None
+        
+        # Get all questions for this dataset
+        cursor.execute(
+            "SELECT * FROM questions WHERE dataset_id = ? ORDER BY category, creation_time",
+            (dataset_id,)
+        )
+        questions = [dict(row) for row in cursor.fetchall()]
+        
+        result = dict(dataset)
+        result['questions'] = questions
+        
+        conn.close()
+        return result
