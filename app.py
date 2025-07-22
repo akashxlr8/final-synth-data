@@ -23,4 +23,4 @@ Use the sidebar to navigate between different tools.
 
 # Footer
 st.markdown("---")
-st.caption("@Copyright - Tata Consultancy Services | 2025")
+st.caption("@Copyright - akashxlr8 | 2025")
