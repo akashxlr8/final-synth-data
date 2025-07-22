@@ -1,0 +1,15 @@
+streamlit==1.31.0
+click==8.1.7
+pandas==2.2.0
+numpy==2.0.0
+scikit-learn==1.3.2
+matplotlib==3.8.2
+seaborn==0.13.0
+sqlite3==3.41.2
+langchain-core==0.1.15
+langchain-cohere==0.0.1
+cohere==4.37
+python-dotenv==1.0.0
+loguru==0.7.2
+pydantic==2.5.2
+sdv==1.2.1
