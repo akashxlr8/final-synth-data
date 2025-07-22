@@ -27,19 +27,53 @@ logger = get_logger(__name__)
 
 from langchain_cohere import ChatCohere
 from langchain_core.messages import HumanMessage
+from secrets_utils import get_cohere_api_key, display_secrets_status
 
 # Initialize LLM with Streamlit secrets
 try:
-    # Try to get API key from Streamlit secrets
-    cohere_api_key = st.secrets.get("cohere", {}).get("api_key")
-    if cohere_api_key:
+    cohere_api_key = get_cohere_api_key()
+    if cohere_api_key and cohere_api_key != "your_cohere_api_key_here":
         llm = ChatCohere(cohere_api_key=cohere_api_key)
+        logger.info("Initialized ChatCohere with API key")
     else:
-        # Fallback to environment variable or default
-        llm = ChatCohere()
+        # Create a mock LLM for demo purposes
+        class MockLLM:
+            def invoke(self, messages):
+                from types import SimpleNamespace
+                
+                # Create a mock response based on the message content
+                mock_response = """```sql
+SELECT 
+    ROW_NUMBER() OVER() as id,
+    'Sample Name ' || ROW_NUMBER() OVER() as name,
+    RANDOM() * 100 as value,
+    DATE('2024-01-01', '+' || (RANDOM() * 365) || ' days') as created_date
+FROM (
+    WITH RECURSIVE numbers(x) AS (
+        SELECT 1
+        UNION ALL
+        SELECT x+1 FROM numbers WHERE x < 100
+    )
+    SELECT x FROM numbers
+);
+```"""
+                
+                response_obj = SimpleNamespace()
+                response_obj.content = mock_response
+                return response_obj
+        
+        llm = MockLLM()
+        logger.warning("Using mock LLM - please configure Cohere API key for full functionality")
 except Exception as e:
-    logger.warning(f"Could not access Streamlit secrets, using default: {e}")
-    llm = ChatCohere()
+    logger.error(f"Error initializing LLM: {e}")
+    # Fallback to mock implementation
+    class MockLLM:
+        def invoke(self, messages):
+            from types import SimpleNamespace
+            response_obj = SimpleNamespace()
+            response_obj.content = "SELECT 1 as sample_data;"
+            return response_obj
+    llm = MockLLM()
 
 from prompts import (
     SQL_GENERATION_PROMPT,
@@ -381,6 +415,9 @@ st.set_page_config(page_title="CSV to DB Manager", layout="wide")
 
 # Page Title
 st.title("Intelligent Test Data Generator")
+
+# Display secrets configuration status
+display_secrets_status()
 
 # Sidebar for actions
 with st.sidebar:
