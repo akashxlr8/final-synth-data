@@ -5,14 +5,14 @@ from langchain_cohere import ChatCohere
 from langchain.output_parsers import PydanticOutputParser
 
 import os, json
-from dotenv import load_dotenv
+import streamlit as st
 import pandas as pd
 from pydantic import BaseModel, Field
 from typing import Optional
+from secrets_utils import get_cohere_api_key, get_azure_config
 
 from logging_config import get_logger
 logger = get_logger("llm_with_tool")
-load_dotenv()
 
 class CodeOutput(BaseModel):
     code: str = Field(description="Valid Python code to execute")
@@ -20,18 +20,96 @@ class CodeOutput(BaseModel):
 
 class CodeEnabledLLM:
     def __init__(self):
-        # Initialize Azure OpenAI client
-        # self.llm = AzureChatOpenAI(
-        #     azure_deployment="bfsi-genai-demo-gpt-4o",
-        #     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        #     api_version="2024-05-01-preview",
-        #     temperature=0,
-        #     max_tokens=None,
-        #     timeout=None,
-        #     max_retries=2,
-        # )
+        # Initialize LLM with Streamlit secrets
+        try:
+            cohere_api_key = get_cohere_api_key()
+            if cohere_api_key and cohere_api_key != "your_cohere_api_key_here":
+                self.llm = ChatCohere(cohere_api_key=cohere_api_key)
+                logger.info("Initialized ChatCohere with API key")
+            else:
+                # Create a mock LLM for demo purposes
+                class MockLLM:
+                    def invoke(self, messages):
+                        from types import SimpleNamespace
+                        import json
+                        
+                        # Mock code analysis response
+                        response = {
+                            "code": """import pandas as pd
+import matplotlib.pyplot as plt
 
-        self.llm = ChatCohere()
+# Basic analysis
+print("Dataset Info:")
+print(f"Shape: {df.shape}")
+print(f"Columns: {list(df.columns)}")
+
+# Simple visualization
+if len(df.columns) > 0:
+    first_col = df.columns[0]
+    if df[first_col].dtype in ['int64', 'float64']:
+        plt.figure(figsize=(8, 6))
+        df[first_col].hist(bins=20)
+        plt.title(f'Distribution of {first_col}')
+        plt.show()
+    else:
+        print(f"Value counts for {first_col}:")
+        print(df[first_col].value_counts().head())""",
+                            "explanation": "This code performs basic exploratory data analysis including dataset overview and visualization based on column types."
+                        }
+                        
+                        response_obj = SimpleNamespace()
+                        response_obj.content = json.dumps(response)
+                        return response_obj
+                
+                self.llm = MockLLM()
+                logger.warning("Using mock LLM - please configure Cohere API key for full functionality")
+        except Exception as e:
+            logger.error(f"Error initializing LLM: {e}")
+            # Fallback to mock implementation
+            class MockLLM:
+                def invoke(self, messages):
+                    from types import SimpleNamespace
+                    import json
+                    response = {"code": "print('LLM not available')", "explanation": "LLM initialization failed"}
+                    response_obj = SimpleNamespace()
+                    response_obj.content = json.dumps(response)
+                    return response_obj
+            self.llm = MockLLM()
+            
+        # Alternative Azure OpenAI implementation using secrets
+        # try:
+        #     azure_config = get_azure_config()
+        #     if azure_config.get("openai_endpoint") and azure_config.get("openai_api_key"):
+        #         self.llm = AzureChatOpenAI(
+        #             azure_deployment=azure_config.get("deployment_name", "gpt-4o"),
+        #             azure_endpoint=azure_config["openai_endpoint"],
+        #             api_key=azure_config["openai_api_key"],
+        #             api_version="2024-05-01-preview",
+        #             temperature=0,
+        #             max_tokens=None,
+        #             timeout=None,
+        #             max_retries=2,
+        #         )
+        # except Exception as e:
+        #     logger.warning(f"Could not initialize Azure OpenAI: {e}")
+            
+        # Alternative Azure OpenAI implementation using secrets
+        # try:
+        #     azure_config = st.secrets.get("azure", {})
+        #     if azure_config.get("openai_endpoint") and azure_config.get("openai_api_key"):
+        #         self.llm = AzureChatOpenAI(
+        #             azure_deployment="bfsi-genai-demo-gpt-4o",
+        #             azure_endpoint=azure_config["openai_endpoint"],
+        #             api_key=azure_config["openai_api_key"],
+        #             api_version="2024-05-01-preview",
+        #             temperature=0,
+        #             max_tokens=None,
+        #             timeout=None,
+        #             max_retries=2,
+        #         )
+        # except Exception as e:
+        #     logger.warning(f"Could not initialize Azure OpenAI: {e}")
+        
         # self.llm=self.llm.with_structured_output(CodeOutput)
         
         # Initialize Python REPL tool
