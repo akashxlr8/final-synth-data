@@ -664,4 +664,4 @@ if "synthetic_data" in st.session_state:
 
 # Footer
 st.markdown("---")
-st.caption("@Copyright - Tata Consultqancy Services | 2025")
+st.caption("@Copyright - akashxlr8 | 2025")
