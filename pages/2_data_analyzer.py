@@ -5,14 +5,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from langchain_cohere import ChatCohere
-from dotenv import load_dotenv
 
 from pages.analyzer.llm_analyzer import DatasetAnalyzer, AnalyticalQuestion
 from pages.analyzer.db import AnalysisDatabase
 from prompts import CODE_GENERATOR_PROMPT
-
-# Load environment variables
-load_dotenv()
 
 # Initialize analyzer and database
 analyzer = DatasetAnalyzer()
@@ -21,8 +17,18 @@ db = AnalysisDatabase()
 from logging_config import get_logger
 logger = get_logger(__name__)
 
-# Initialize LLM
-llm = ChatCohere()
+# Initialize LLM with Streamlit secrets
+try:
+    # Try to get API key from Streamlit secrets
+    cohere_api_key = st.secrets.get("cohere", {}).get("api_key")
+    if cohere_api_key:
+        llm = ChatCohere(cohere_api_key=cohere_api_key)
+    else:
+        # Fallback to environment variable or default
+        llm = ChatCohere()
+except Exception as e:
+    logger.warning(f"Could not access Streamlit secrets, using default: {e}")
+    llm = ChatCohere()
 
 from db_functions import load_from_sqlite
 
